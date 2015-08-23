@@ -1,0 +1,112 @@
+#include <SPI.h>
+#include "RF24.h"
+
+//************************************************************
+// RF24 Slave                                                *
+//                                                           *
+// Michael R Wild 22 Aug 2015                                *
+//                                                           *
+//                                                           *
+//************************************************************
+
+/*
+* Based on code from "Updated: Dec 2014 by TMRh20"
+*/
+
+#define SPI_1    9
+#define SPI_2    10 
+#define LED      3  
+
+//************************************************************************
+// House keeping 
+
+char  version_code[ ]   = "0.1";
+char  project_name[ ]   = "RF24 Slave";
+
+/***      This is radio 1         ***/
+bool radioNumber = 1;
+
+/* Hardware configuration: Set up nRF24L01 radio on SPI bus */
+RF24 radio(SPI_1,SPI_2);
+/**********************************************************/
+
+byte addresses[][6] = {"1Node","2Node"};
+
+// Used to control whether this node is sending or receiving
+bool role = 1;
+
+// Command counter
+
+unsigned long command_read = 0;
+unsigned long command_count = 0;
+unsigned long command_order = 0;
+unsigned long command_value = 0;
+
+//********************************
+//* Arduino Setup                *
+//********************************
+void setup() {
+  
+  // Use Serial to control  
+  
+  Serial.begin(9600); //MRW 9600 works better for me
+  Serial.println();
+
+  // Print a message 
+
+  Serial.println(project_name);
+  
+  Serial.print("Version ");
+  Serial.println(version_code);
+  
+  // Start the radio
+  radio.begin();
+
+  // Retail Set the PA Level low to prevent power supply related issues 
+  radio.setPALevel(RF24_PA_LOW);
+  
+  radio.openWritingPipe(addresses[1]);
+  radio.openReadingPipe(1,addresses[0]);
+  
+  // Start the radio listening for data
+  radio.startListening();
+
+  // Use LED to show strength of value
+  pinMode(LED, OUTPUT);
+
+
+}
+
+void loop() {
+ 
+  if( radio.available()){
+                                                                    
+    while (radio.available()) {                                  
+      radio.read( &command_read, sizeof(unsigned long) );
+    }
+
+      command_count = int(command_read / 10000);
+      command_order = int((command_read - (command_count*10000))/100);
+      command_value = command_read - 10000*command_count - 100*command_order;
+
+      int brightness = int((command_value/100.0) * 255);
+      analogWrite(LED, brightness); 
+     
+      radio.stopListening();                                        // First, stop listening so we can talk   
+      radio.write( &command_count, sizeof(unsigned long) );              // Send the final one back.      
+      radio.startListening();                                       // Now, resume listening so we catch the next packets.     
+      Serial.print(F("Sent response "));
+      Serial.println(command_count);    
+
+      Serial.print(F("Command:"));
+      Serial.print(command_order);
+      Serial.print(F("/"));
+      Serial.println(command_value);
+  }
+  
+} // Loop
+
+
+
+
+
