@@ -18,3 +18,7 @@ I put a sliding potentiometer and measure it on A0 on the command Arduino.
 I pass one large unsigned int and do math to make three two digit value for it. 
 I intend to have three values at one time.
 
+RF24 updates was from:
+http://tmrh20.github.io/RF24/
+
+No license for my code. Help yourself. No warrenty is also offered.
