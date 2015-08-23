@@ -1,0 +1,128 @@
+
+#include <SPI.h>
+#include "RF24.h"
+
+//************************************************************
+// RF24 Command                                              *
+//                                                           *
+// Michael R Wild 22 Aug 2015                                *
+//                                                           *
+//                                                           *
+//************************************************************
+
+/*
+* Based on code from "Updated: Dec 2014 by TMRh20"
+*/
+
+#define SPI_1    9
+#define SPI_2    10    
+
+//************************************************************************
+// House keeping 
+
+char  version_code[ ]   = "0.1";
+char  project_name[ ]   = "RF24 Command";
+
+/***      This is radio 0         ***/
+bool radioNumber = 0;
+
+/* Hardware configuration: Set up nRF24L01 radio on SPI bus */
+RF24 radio(SPI_1,SPI_2);
+/**********************************************************/
+
+byte addresses[][6] = {"1Node","2Node"};
+
+// Used to control whether this node is sending or receiving
+bool role = 0;
+
+// Command counter
+
+unsigned long command_count = 0;
+unsigned long command_value = 0;
+
+//********************************
+//* Arduino Setup                *
+//********************************
+void setup() {
+  
+  // Use Serial to control  
+  
+  Serial.begin(9600); //MRW 9600 works better for me
+  Serial.println();
+
+  // Print a message 
+
+  Serial.println(project_name);
+  
+  Serial.print("Version ");
+  Serial.println(version_code);
+  
+  // Start the radio
+  radio.begin();
+
+  // Retail Set the PA Level low to prevent power supply related issues 
+  radio.setPALevel(RF24_PA_LOW);
+  
+
+  radio.openWritingPipe(addresses[0]);
+  radio.openReadingPipe(1,addresses[1]);
+
+  // Start the radio listening for data
+  radio.startListening();
+}
+
+void loop() {
+    
+  int sensorValue = analogRead(A0);
+  int sensorRate = ((sensorValue/1024.0)*100);
+  Serial.print(F("Slide "));
+  
+  Serial.println(sensorRate);
+  
+  radio.stopListening();                                    // First, stop listening so we can talk.
+    
+    
+  Serial.println(F("Now sending"));
+
+  ++command_count;
+  if (command_count > 97) {
+    command_count = 1;
+  }
+  command_value = (100 * (command_count+1)) + ((command_count+2)*10000) + sensorRate;
+  if (!radio.write( &command_value, sizeof(unsigned long) )){
+    Serial.println(F("count failed"));
+   }
+ 
+  radio.startListening();                                    // Now, continue listening
+ 
+  unsigned long started_waiting_at = micros();               // Set up a timeout period, get the current microseconds
+  boolean timeout = false;
+  
+  while ( ! radio.available() ){                             // While nothing is received
+    if (micros() - started_waiting_at > 200000 ){            // If waited longer than 200ms, indicate timeout and exit while loop
+        timeout = true;
+        break;
+    }      
+  }
+        
+  if ( timeout ){                                             // Describe the results
+      Serial.println(F("Failed, response timed out."));
+  }
+  else {
+      unsigned long got_command;                                 // Grab the response, compare, and send to debugging spew
+      radio.read( &got_command, sizeof(unsigned long) );
+      unsigned long time = micros();
+        
+      // Spew it
+      Serial.print(F("Sent "));
+      Serial.print(command_value);
+      Serial.print(F(", Got response "));
+      Serial.println(got_command);
+
+  }
+
+  // Try again 1s later
+  delay(1000);
+
+} // Loop
+
