@@ -1,5 +1,9 @@
-#include <SPI.h>
+#include <SPI.h>   // Comes with Arduino IDE
 #include "RF24.h"
+#include <Wire.h>  // Comes with Arduino IDE
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
 
 //************************************************************
 // RF24 Slave                                                *
@@ -11,23 +15,42 @@
 
 /*
 * Based on code from "Updated: Dec 2014 by TMRh20"
+* 
+* Get the LCD I2C Library here: 
+* https://bitbucket.org/fmalpartida/new-liquidcrystal/downloads
+* 
+* SDA A4
+* SDL A5
 */
 
+#define SERVO    7
 #define SPI_1    9
 #define SPI_2    10 
-#define LED      3  
+#define LED      3
+#define MOTOR    6  
+
+// SPI uses 11,12,13 too
 
 //************************************************************************
 // House keeping 
 
-char  version_code[ ]   = "0.1";
+char  version_code[ ]   = "0.6";
 char  project_name[ ]   = "RF24 Slave";
+char  printBuffer[50]   = " ";
 
 /***      This is radio 1         ***/
 bool radioNumber = 1;
 
 /* Hardware configuration: Set up nRF24L01 radio on SPI bus */
 RF24 radio(SPI_1,SPI_2);
+
+/* Get servo define */
+Servo theservo;
+
+//************************************************************************
+// Declare needed objects
+
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
 /**********************************************************/
 
 byte addresses[][6] = {"1Node","2Node"};
@@ -39,8 +62,11 @@ bool role = 1;
 
 unsigned long command_read = 0;
 unsigned long command_count = 0;
-unsigned long command_order = 0;
-unsigned long command_value = 0;
+unsigned long command_servo = 0;
+unsigned long command_motor = 0;
+
+unsigned long command_servo_before = 99999999;
+unsigned long command_motor_before = 99999999;
 
 //********************************
 //* Arduino Setup                *
@@ -58,7 +84,42 @@ void setup() {
   
   Serial.print("Version ");
   Serial.println(version_code);
-  
+
+  lcd.begin(20,4);         // initialize the lcd for 20 chars 4 lines, turn on backlight
+
+// ------- Quick 3 blinks of backlight  -------------
+  for(int i = 0; i< 3; i++)
+  {
+    lcd.backlight();
+    delay(250);
+    lcd.noBacklight();
+    delay(250);
+  }
+  lcd.backlight(); // finish with backlight on  
+
+  //-------- Write characters on the display ------------------
+  // NOTE: Cursor Position: Lines and Characters start at 0  
+  lcd.setCursor(3,0); //Start at character 4 on line 0
+  lcd.print("Hello, world!");
+  delay(1000);
+  lcd.clear();
+  lcd.setCursor(0,0); //Start at corner
+  lcd.print(project_name);
+  lcd.setCursor(0,1); //Next line
+  lcd.print("Version ");
+  lcd.print(version_code);
+  delay(1000);
+
+  // Start-up  Servo
+  theservo.attach(SERVO);  // attaches the servo on pin 9 to the servo object
+   
+  int val = 0;
+  val = map(val, 0, 99, 0, 180);     // scale it to use it with the servo (value between 0 and 180) 
+  theservo.write(val);    
+
+  // Start the Motor
+  pinMode(MOTOR, OUTPUT);
+
   // Start the radio
   radio.begin();
 
@@ -86,27 +147,48 @@ void loop() {
     }
 
       command_count = int(command_read / 10000);
-      command_order = int((command_read - (command_count*10000))/100);
-      command_value = command_read - 10000*command_count - 100*command_order;
+      command_servo = int((command_read - (command_count*10000))/100);
+      command_motor = command_read - 10000*command_count - 100*command_servo;
 
-      int brightness = int((command_value/100.0) * 255);
-      analogWrite(LED, brightness); 
+      // Only proceed with loop if something changed
+      if ((command_servo != command_servo_before) || (command_motor != command_motor_before)) {
+        command_servo_before = command_servo;
+        command_motor_before = command_motor;
      
-      radio.stopListening();                                        // First, stop listening so we can talk   
-      radio.write( &command_count, sizeof(unsigned long) );              // Send the final one back.      
-      radio.startListening();                                       // Now, resume listening so we catch the next packets.     
-      Serial.print(F("Sent response "));
-      Serial.println(command_count);    
+        int brightness = int((command_servo/100.0) * 255);
+        analogWrite(LED, brightness); 
 
-      Serial.print(F("Command:"));
-      Serial.print(command_order);
-      Serial.print(F("/"));
-      Serial.println(command_value);
-  }
+        int val = command_servo;
+        val = map(val, 0, 99, 0, 180);     // scale it to use it with the servo (value between 0 and 180) 
+        theservo.write(val); 
+
+        int motor = command_motor;
+        motor = map(motor, 0, 99, 0, 255);
+        analogWrite(MOTOR, motor);
+     
+        radio.stopListening();                                        // First, stop listening so we can talk   
+        radio.write( &command_count, sizeof(unsigned long) );         // Now ping back to get next command     
+        radio.startListening();                                       // Start again listening for pong back
+      
+        Serial.print(F("Sent response "));
+        Serial.println(command_count);    
+
+        lcd.setCursor(0,0); //Start at corner
+        lcd.print(project_name);
+        lcd.setCursor(0,1); //Next line
+        lcd.print("Version ");
+        lcd.print(version_code);
+        lcd.setCursor(0,2); //Next line
+        lcd.print("Command:");
+        lcd.print(command_count);
+        lcd.setCursor(0,3); //Next line
+        lcd.print("Command:");
+        lcd.print(command_servo);
+        lcd.print(F("/"));
+        lcd.print(command_motor);
+        
+      } // if mistmatch
+      
+  } // Radio available
   
 } // Loop
-
-
-
-
-
