@@ -1,4 +1,3 @@
-
 #include <SPI.h>
 #include "RF24.h"
 
@@ -15,12 +14,12 @@
 */
 
 #define SPI_1    9
-#define SPI_2    10    
+#define SPI_2    10
 
 //************************************************************************
 // House keeping 
 
-char  version_code[ ]   = "0.1";
+char  version_code[ ]   = "0.2";
 char  project_name[ ]   = "RF24 Command";
 
 /***      This is radio 0         ***/
@@ -74,10 +73,14 @@ void setup() {
 void loop() {
     
   int sensorValue = analogRead(A0);
-  int sensorRate = ((sensorValue/1024.0)*100);
-  Serial.print(F("Slide "));
-  
-  Serial.println(sensorRate);
+  int sensorRate0 = ((sensorValue/1024.0)*100);
+  Serial.print(F("Slide 0"));
+  Serial.println(sensorRate0);
+
+  sensorValue = analogRead(A1);
+  int sensorRate1 = ((sensorValue/1024.0)*100);
+  Serial.print(F("Slide 1"));
+  Serial.println(sensorRate1);
   
   radio.stopListening();                                    // First, stop listening so we can talk.
     
@@ -88,7 +91,7 @@ void loop() {
   if (command_count > 97) {
     command_count = 1;
   }
-  command_value = (100 * (command_count+1)) + ((command_count+2)*10000) + sensorRate;
+  command_value = (100 * (sensorRate0)) + ((command_count)*10000) + sensorRate1;
   if (!radio.write( &command_value, sizeof(unsigned long) )){
     Serial.println(F("count failed"));
    }
@@ -125,4 +128,3 @@ void loop() {
   delay(1000);
 
 } // Loop
-
